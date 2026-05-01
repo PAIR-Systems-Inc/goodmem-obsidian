@@ -1,0 +1,11 @@
+{
+  "id": "goodmem-sync",
+  "name": "GoodMem Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Sync Markdown notes to a GoodMem server on every save.",
+  "author": "GoodMem",
+  "authorUrl": "https://goodmem.ai",
+  "isDesktopOnly": false
+}
+
