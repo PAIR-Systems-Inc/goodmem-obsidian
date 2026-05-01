@@ -2,7 +2,18 @@
 
 Sync Markdown notes to a GoodMem server via the GoodMem REST API on every note save.
 
-## What it does
+## Why use it
+
+This plugin turns your Obsidian vault into a searchable knowledge base for AI, powered by [GoodMem](https://goodmem.ai). Once your notes are in GoodMem, you can do things like:
+
+- **Search semantically** — find notes by meaning, not just keywords.
+- **Summarize** — pull up the relevant pieces of a topic across many notes.
+- **Power second-brain workflows** — ask questions about your own writing and get grounded answers.
+- **Connect notes to LLMs** — give any LLM client (via the GoodMem API) live context from your vault.
+
+These are just a few examples — anything you can build on top of the [GoodMem](https://goodmem.ai) API can now draw from your vault. You keep writing in Obsidian as usual; the plugin syncs each note in the background so retrieval stays current.
+
+## How it works
 
 On every `*.md` save, the plugin:
 
@@ -14,6 +25,18 @@ On every `*.md` save, the plugin:
    - `contentType: "text/markdown"`
    - `originalContent: <full markdown text>`
    - `metadata` including tags + path labels.
+
+## Prerequisites: a GoodMem server
+
+This plugin syncs to a GoodMem server, so you need one running before the plugin can do anything useful. GoodMem is free to use under its own license — no paid plan required to get started.
+
+To install GoodMem locally, run:
+
+```bash
+curl -s "https://get.goodmem.ai" | bash
+```
+
+For more install options, including cloud options, see [goodmem.ai](https://goodmem.ai).
 
 ## Configuration
 
@@ -83,4 +106,3 @@ During initial sync, progress is shown in the status bar (desktop). Normal save 
 
 You can sync the currently open note via:
 - Command palette: **GoodMem Sync: Sync current note now**
-# igoodmem-obsidian
