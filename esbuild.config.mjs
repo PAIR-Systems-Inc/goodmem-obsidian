@@ -17,6 +17,12 @@ const buildOptions = {
   external: [
     "obsidian",
     "electron",
+    "http",
+    "https",
+    "http2",
+    "node:http",
+    "node:https",
+    "node:http2",
     "@codemirror/state",
     "@codemirror/view",
     "@codemirror/language",

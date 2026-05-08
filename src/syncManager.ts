@@ -310,7 +310,7 @@ export class SyncManager {
       await this.syncOnce(file, settings);
     } catch (err: unknown) {
       const message = (err as any)?.message ?? String(err);
-      this.debug(`[GoodMem] Sync failed for ${normalizedPath}: ${message}`);
+      console.error(`[GoodMem] Sync failed for ${normalizedPath}: ${message}`, err);
       this.notices.show(`GoodMem Sync failed for "${normalizedPath}". Check console for details.`);
     } finally {
       state.inFlight = false;
