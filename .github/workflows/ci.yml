@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: typecheck + test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        # esbuild does not typecheck; tsc is what catches a wrong option name.
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Manifest and package versions agree
+        run: |
+          m=$(node -p "require('./manifest.json').version")
+          p=$(node -p "require('./package.json').version")
+          echo "manifest=$m package=$p"
+          [ "$m" = "$p" ] || { echo "::error::manifest.json and package.json disagree"; exit 1; }
+
+      - name: No TLS verification bypass
+        # 0.1.0 shipped rejectUnauthorized:false for every host.
+        run: |
+          if grep -rInE 'rejectUnauthorized:\s*false' src main.ts; then
+            echo "::error::unconditional rejectUnauthorized:false is not allowed"
+            exit 1
+          fi
+          echo "clean"
+
+      - name: No GoodMem API keys in the tree
+        run: |
+          if grep -rInE 'gm_[a-z0-9]{20,}' --exclude-dir=.git --exclude-dir=node_modules .; then
+            echo "::error::a GoodMem API key is present in the working tree"
+            exit 1
+          fi
+          echo "clean"

@@ -1,6 +1,7 @@
 import { App, TFile } from "obsidian";
 import { v5 as uuidv5 } from "uuid";
 import { GoodMemApiClient } from "./goodmemApiClient";
+import { hostOf } from "./goodmemEndpoints";
 import { CreateMemoryRequest } from "./goodmemTypes";
 import { HttpError } from "./http";
 import { extractAllTags } from "./tags";
@@ -14,6 +15,8 @@ export interface GoodMemSyncSettings {
   enableDebugLogging: boolean;
   initialSyncOnStartup: boolean;
   initialSyncConcurrency: number;
+  /** Accept a self-signed certificate for the configured server host only. */
+  allowSelfSignedCert: boolean;
 }
 
 export type StatusReporter = (text: string) => void;
@@ -28,7 +31,9 @@ type FileSyncState = {
   timerId?: number;
   inFlight: boolean;
   pending: boolean;
-  waiters: Array<() => void>;
+  // Called with the run's failure, if any, so a caller that waited on the
+  // run learns whether it worked. A waiter resolved with no argument succeeded.
+  waiters: Array<(failure?: unknown) => void>;
 };
 
 export class SyncManager {
@@ -225,6 +230,10 @@ export class SyncManager {
     };
   }
 
+  /**
+   * Sync one file and wait for the result. Rejects if the upload failed, so a
+   * caller counting outcomes (the initial sync) counts it as a failure.
+   */
   async syncNow(normalizedPath: string): Promise<void> {
     const state = this.states.get(normalizedPath) ?? { inFlight: false, pending: false, waiters: [] };
     this.states.set(normalizedPath, state);
@@ -242,19 +251,19 @@ export class SyncManager {
     if (!state) return Promise.resolve();
     if (state.timerId === undefined && !state.inFlight && !state.pending) return Promise.resolve();
 
-    return new Promise((resolve) => {
-      state.waiters.push(resolve);
+    return new Promise((resolve, reject) => {
+      state.waiters.push((failure) => (failure === undefined ? resolve() : reject(failure)));
     });
   }
 
-  private resolveWaitersIfIdle(normalizedPath: string, state: FileSyncState): void {
+  private resolveWaitersIfIdle(normalizedPath: string, state: FileSyncState, failure?: unknown): void {
     if (state.timerId !== undefined) return;
     if (state.inFlight) return;
     if (state.pending) return;
     if (state.waiters.length === 0) return;
     const waiters = state.waiters.slice();
     state.waiters.length = 0;
-    for (const w of waiters) w();
+    for (const w of waiters) w(failure);
   }
 
   private async runSync(normalizedPath: string): Promise<void> {
@@ -306,9 +315,15 @@ export class SyncManager {
     this.lastActivePath = normalizedPath;
     this.emitStatus();
 
+    // A failed upload used to be indistinguishable from a successful one to
+    // anyone awaiting syncNow(): the waiters were resolved either way, so the
+    // initial sync counted every file as "ok". The failure is now handed to
+    // the waiters and syncNow() rejects with it.
+    let failure: unknown;
     try {
       await this.syncOnce(file, settings);
     } catch (err: unknown) {
+      failure = err;
       const message = (err as any)?.message ?? String(err);
       console.error(`[GoodMem] Sync failed for ${normalizedPath}: ${message}`, err);
       this.notices.show(`GoodMem Sync failed for "${normalizedPath}". Check console for details.`);
@@ -322,7 +337,7 @@ export class SyncManager {
         void this.runSync(normalizedPath);
         return;
       }
-      this.resolveWaitersIfIdle(normalizedPath, state);
+      this.resolveWaitersIfIdle(normalizedPath, state, failure);
       this.emitStatus();
     }
   }
@@ -358,6 +373,9 @@ export class SyncManager {
       maxRetries: DEFAULT_MAX_RETRIES,
       logger: settings.enableDebugLogging
         ? { debug: (m: string) => console.debug(m) }
+        : undefined,
+      allowSelfSignedHost: settings.allowSelfSignedCert
+        ? hostOf(settings.serverUrl)
         : undefined
     });
 

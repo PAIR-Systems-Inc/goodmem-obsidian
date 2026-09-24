@@ -13,6 +13,12 @@ export interface HttpClientOptions {
   timeoutMs: number;
   maxRetries: number;
   logger?: HttpLogger;
+  /**
+   * Hostname (or "host:port") whose self-signed certificate the user has
+   * explicitly chosen to accept. Certificates are verified for every other
+   * host, always. Undefined means verify everywhere.
+   */
+  allowSelfSignedHost?: string;
 }
 
 export class HttpError extends Error {
@@ -44,10 +50,18 @@ function backoffMs(attempt: number): number {
   return base + jitter;
 }
 
-// Module-scoped so the warning fires at most once per host for the whole plugin
-// lifetime — every sync creates a fresh client, and a per-instance Set would
-// re-warn on every request.
-const insecureWarnedHosts = new Set<string>();
+/**
+ * Does `host` match the host the user opted out of verification for?
+ *
+ * Compared after normalising case and a default port, and only ever against
+ * the one host in settings: an opt-out for a local server must not silently
+ * extend to a redirect or a misconfiguration pointing somewhere else.
+ */
+export function isExemptHost(host: string, allowSelfSignedHost: string | undefined): boolean {
+  if (!allowSelfSignedHost) return false;
+  const normalise = (h: string) => h.trim().toLowerCase().replace(/:443$/, "");
+  return normalise(host) === normalise(allowSelfSignedHost);
+}
 
 interface RawResponse {
   status: number;
@@ -62,7 +76,7 @@ function nodeRequest(
   body: string | undefined,
   timeoutMs: number,
   signal: AbortSignal,
-  onInsecureCert: () => void
+  allowInsecure: boolean
 ): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     let parsed: URL;
@@ -84,8 +98,11 @@ function nodeRequest(
       path: `${parsed.pathname}${parsed.search}`,
       headers: reqHeaders,
       timeout: timeoutMs,
-      // Accept invalid/self-signed TLS certs; we log a debug line on first occurrence per host.
-      rejectUnauthorized: false
+      // Verified unless the user explicitly exempted exactly this host. The
+      // plugin uploads note bodies and the API key, so accepting any
+      // certificate from any host would hand both to anyone able to
+      // intercept the connection.
+      rejectUnauthorized: !allowInsecure
     };
 
     const req = lib.request(opts, (res) => {
@@ -108,16 +125,6 @@ function nodeRequest(
       res.on("error", reject);
     });
 
-    if (isHttps) {
-      req.on("socket", (socket: any) => {
-        const check = () => {
-          if (typeof socket.authorized === "boolean" && socket.authorized === false) {
-            onInsecureCert();
-          }
-        };
-        socket.on("secureConnect", check);
-      });
-    }
 
     req.on("timeout", () => {
       req.destroy(Object.assign(new Error("Request timed out"), { name: "AbortError" }));
@@ -140,24 +147,16 @@ export class GoodMemHttpClient {
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
   private readonly logger?: HttpLogger;
+  private readonly allowSelfSignedHost?: string;
 
   constructor(opts: HttpClientOptions) {
     this.apiKey = opts.apiKey;
     this.timeoutMs = opts.timeoutMs;
     this.maxRetries = opts.maxRetries;
     this.logger = opts.logger;
+    this.allowSelfSignedHost = opts.allowSelfSignedHost;
   }
 
-  private warnInsecureCert(host: string): void {
-    if (insecureWarnedHosts.has(host)) return;
-    insecureWarnedHosts.add(host);
-    const msg = `[GoodMem] accepting invalid TLS certificate for ${host}`;
-    // Use console.debug — we already gate to once-per-host, and Obsidian's
-    // "plugin failed, output suppressed" indicator triggers on repeated
-    // console.warn/error from a plugin.
-    if (this.logger?.warn) this.logger.warn(msg);
-    else console.debug(msg);
-  }
 
   async requestJson<TResponse>(
     method: HttpMethod,
@@ -183,6 +182,7 @@ export class GoodMemHttpClient {
         };
         if (bodyStr !== undefined) headers["Content-Type"] = "application/json";
 
+        const allowInsecure = isExemptHost(host, this.allowSelfSignedHost);
         const resp = await nodeRequest(
           method,
           url,
@@ -190,7 +190,7 @@ export class GoodMemHttpClient {
           bodyStr,
           this.timeoutMs,
           controller.signal,
-          () => this.warnInsecureCert(host)
+          allowInsecure
         );
 
         const elapsedMs = Date.now() - startedAt;
@@ -223,6 +223,11 @@ export class GoodMemHttpClient {
           responseBodyText: resp.bodyText
         });
       } catch (err: unknown) {
+        // A non-retryable HTTP status was already decided above and thrown
+        // from inside this try; it must not fall into the network-error
+        // retry below, or a 400 or a 409 is re-sent maxRetries more times.
+        if (err instanceof HttpError) throw err;
+
         const elapsedMs = Date.now() - startedAt;
         const isAbort =
           (err instanceof Error && err.name === "AbortError") ||

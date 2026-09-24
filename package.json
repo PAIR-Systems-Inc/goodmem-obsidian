@@ -1,13 +1,14 @@
 {
   "name": "goodmem-obsidian-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Obsidian plugin that syncs Markdown notes to a GoodMem server on save.",
   "license": "MIT",
   "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs --watch",
     "build": "node esbuild.config.mjs production",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "dependencies": {
     "uuid": "^9.0.1"
