@@ -38,7 +38,9 @@ export default class GoodMemSyncPlugin extends Plugin {
         const enabled = !!file && file.extension === "md";
         if (checking) return enabled;
         if (!file) return;
-        void this.syncManager.syncNow(file.path);
+        this.syncManager.syncNow(file.path).catch(() => {
+          // Already reported by SyncManager (console + notice).
+        });
       }
     });
 

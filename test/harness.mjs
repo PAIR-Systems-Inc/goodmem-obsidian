@@ -42,8 +42,29 @@ function obsidianStub() {
     return doc;
   };
   const strip = (v) => v.trim().replace(/^["']|["']$/g, "");
-  return { parseYaml };
+  // Enough of TFile for SyncManager's `instanceof TFile` check and `.extension`.
+  class TFile {
+    constructor(path) {
+      this.path = path;
+      this.extension = path.includes(".") ? path.split(".").pop() : "";
+    }
+  }
+  // Notices are UI; outside Obsidian they are recorded, not shown.
+  class Notice {
+    constructor(message) {
+      this.message = message;
+      Notice.shown.push(message);
+    }
+  }
+  Notice.shown = [];
+  return { parseYaml, TFile, Notice };
 }
+
+/**
+ * The one stub instance every bundle sees. Tests construct TFile through it so
+ * SyncManager's `instanceof TFile` holds, and read Notice.shown from it.
+ */
+export const obsidian = obsidianStub();
 
 /** Bundle a source module to CJS and require it. */
 export function loadModule(entry) {
@@ -57,7 +78,7 @@ export function loadModule(entry) {
   // "obsidian" is external in the bundle and unresolvable outside the app.
   const obsidianPath = require.resolve("node:util");
   require.cache[obsidianPath] = { id: obsidianPath, filename: obsidianPath,
-    loaded: true, exports: obsidianStub() };
+    loaded: true, exports: obsidian };
   const Module = require("node:module");
   const origResolve = Module._resolveFilename;
   Module._resolveFilename = function (request, ...rest) {
