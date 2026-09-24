@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- **The initial sync counted failed uploads as successes.** `syncNow()` waited on
+  the file's idle waiters, which resolved whether the upload worked or not, so a
+  vault whose uploads all failed still reported "N ok, 0 failed". The failure now
+  rejects `syncNow()` and the initial sync counts it. Four tests pin it.
 - **`isDesktopOnly` is now `true`.** 0.1.0 declared `false` while importing
   Node's `http`/`https`, which Obsidian mobile does not provide, so the plugin
   advertised mobile support it could not deliver.

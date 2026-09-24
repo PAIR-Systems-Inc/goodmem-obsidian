@@ -4,7 +4,7 @@ Sync Markdown notes to a GoodMem server via the GoodMem REST API on every note s
 
 > **Status — 0.2.0 (unreleased).** Not published to the Obsidian community
 > plugin registry and no GitHub release exists; install by building from
-> source (below). Desktop only. 18 tests run against the plugin's own bundled
+> source (below). Desktop only. 22 tests run against the plugin's own bundled
 > code; the retrieval-facing behaviour is verified against a live GoodMem
 > server (v1.0.320).
 
@@ -135,7 +135,7 @@ Obsidian's community-plugin settings.
 
 - Install deps: `npm install`
 - Typecheck: `npm run typecheck`
-- Test: `npm test` (18 tests)
+- Test: `npm test` (22 tests)
 - Build once: `npm run build`
 - Dev (watch): `npm run dev`
 
