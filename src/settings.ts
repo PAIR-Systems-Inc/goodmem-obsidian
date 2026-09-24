@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type GoodMemSyncPlugin from "../main";
 import type { GoodMemSyncSettings } from "./syncManager";
+import { hostOf } from "./goodmemEndpoints";
 
 export const DEFAULT_SETTINGS: GoodMemSyncSettings = {
   serverUrl: "",
@@ -9,7 +10,8 @@ export const DEFAULT_SETTINGS: GoodMemSyncSettings = {
   debounceMs: 750,
   enableDebugLogging: false,
   initialSyncOnStartup: false,
-  initialSyncConcurrency: 4
+  initialSyncConcurrency: 4,
+  allowSelfSignedCert: false
 };
 
 export class GoodMemSyncSettingTab extends PluginSettingTab {
@@ -52,6 +54,32 @@ export class GoodMemSyncSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           });
       });
+
+    new Setting(containerEl)
+      .setName("Allow self-signed certificate")
+      .setDesc(
+        "Off by default. When on, the TLS certificate is not verified for the " +
+          "server above — and only that host. Anyone able to intercept the " +
+          "connection can then read your notes and your API key. Use only for " +
+          "a local server you control."
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.allowSelfSignedCert).onChange(async (value) => {
+          this.plugin.settings.allowSelfSignedCert = value;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (this.plugin.settings.allowSelfSignedCert) {
+      const host = hostOf(this.plugin.settings.serverUrl);
+      const warning = containerEl.createEl("p", {
+        text:
+          `⚠ TLS verification is disabled for ${host || "the configured server"}. ` +
+          "Your notes and API key are exposed to anyone who can intercept this connection.",
+      });
+      warning.style.color = "var(--text-error)";
+    }
 
     new Setting(containerEl)
       .setName("Space ID")

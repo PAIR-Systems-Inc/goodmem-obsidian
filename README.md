@@ -46,10 +46,31 @@ Settings (required):
 - `spaceId` (UUID string)
 
 Settings (optional):
+- `allowSelfSignedCert` (boolean, default `false`) — see **TLS** below
 - `debounceMs` (number, default `750`)
 - `enableDebugLogging` (boolean)
 - `initialSyncOnStartup` (boolean, default `false`)
 - `initialSyncConcurrency` (number, default `4`)
+
+### TLS
+
+Certificates are verified. The plugin uploads the full text of your notes and
+sends your API key on every request, so accepting an unverified certificate
+means handing both to anyone able to intercept the connection.
+
+If your GoodMem server uses a self-signed certificate, turn on **Allow
+self-signed certificate** in settings. It applies to **only the host in
+`serverUrl`** — an exemption for `localhost:8080` never extends to any other
+host — and the settings pane shows a standing warning while it is on.
+
+> Versions up to 0.1.0 disabled verification for *every* host unconditionally,
+> and reported it with a `console.debug` line that the plugin never surfaced.
+
+### Desktop only
+
+The plugin uses Node's `https` module, which Obsidian mobile does not provide,
+so `manifest.json` declares `isDesktopOnly: true`. (0.1.0 declared `false`
+while importing the same Node modules.)
 
 Server URL normalization:
 - If you enter `http://host:8080`, requests go to `http://host:8080/v1/...`
@@ -84,8 +105,13 @@ Prereqs: Node.js 18+ recommended.
 
 - Install deps: `npm install`
 - Typecheck: `npm run typecheck`
+- Test: `npm test`
 - Build once: `npm run build`
 - Dev (watch): `npm run dev`
+
+The tests bundle the plugin's real TypeScript with esbuild and run it under
+Node, so they exercise the shipped code. The TLS tests stand up actual HTTPS
+servers with self-signed certificates rather than mocking the socket.
 
 ## Security note
 

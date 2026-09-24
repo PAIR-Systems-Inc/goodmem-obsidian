@@ -21,3 +21,17 @@ export function memoryUrl(baseUrl: string, memoryId: string): string {
   return `${baseUrl}/memories/${encodeURIComponent(memoryId)}`;
 }
 
+
+/**
+ * The "host[:port]" of a server URL, or "" when it cannot be parsed.
+ *
+ * Used to scope a self-signed-certificate exemption to exactly the server the
+ * user configured, so it can never apply to another host.
+ */
+export function hostOf(serverUrl: string): string {
+  try {
+    return new URL(serverUrl.trim()).host;
+  } catch {
+    return "";
+  }
+}

@@ -1,6 +1,7 @@
 import { App, TFile } from "obsidian";
 import { v5 as uuidv5 } from "uuid";
 import { GoodMemApiClient } from "./goodmemApiClient";
+import { hostOf } from "./goodmemEndpoints";
 import { CreateMemoryRequest } from "./goodmemTypes";
 import { HttpError } from "./http";
 import { extractAllTags } from "./tags";
@@ -14,6 +15,8 @@ export interface GoodMemSyncSettings {
   enableDebugLogging: boolean;
   initialSyncOnStartup: boolean;
   initialSyncConcurrency: number;
+  /** Accept a self-signed certificate for the configured server host only. */
+  allowSelfSignedCert: boolean;
 }
 
 export type StatusReporter = (text: string) => void;
@@ -358,6 +361,9 @@ export class SyncManager {
       maxRetries: DEFAULT_MAX_RETRIES,
       logger: settings.enableDebugLogging
         ? { debug: (m: string) => console.debug(m) }
+        : undefined,
+      allowSelfSignedHost: settings.allowSelfSignedCert
+        ? hostOf(settings.serverUrl)
         : undefined
     });
 

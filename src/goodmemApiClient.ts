@@ -12,13 +12,16 @@ export class GoodMemApiClient {
     timeoutMs?: number;
     maxRetries?: number;
     logger?: HttpLogger;
+    /** Host whose self-signed certificate the user explicitly allowed. */
+    allowSelfSignedHost?: string;
   }) {
     this.baseUrl = normalizeGoodMemBaseUrl(opts.serverUrl);
     this.http = new GoodMemHttpClient({
       apiKey: opts.apiKey,
       timeoutMs: opts.timeoutMs ?? 15_000,
       maxRetries: opts.maxRetries ?? 3,
-      logger: opts.logger
+      logger: opts.logger,
+      allowSelfSignedHost: opts.allowSelfSignedHost
     });
   }
 
