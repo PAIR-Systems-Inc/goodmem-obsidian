@@ -9,8 +9,10 @@ describe("request handling", () => {
   before(async () => {
     server = await selfSignedServer("localhost", (req, res, body) => {
       const url = req.url ?? "";
-      if (url.includes("/retry-then-ok")) {
-        const n = (server.received.filter((r) => r.url?.includes("/retry-then-ok")) || []).length;
+      if (url.startsWith("/retry-then-ok")) {
+        // ?id=… gives each test its own counter; a shared one made the
+        // second caller see an endpoint that had already stopped failing.
+        const n = server.received.filter((r) => r.url === url).length;
         if (n < 2) { res.writeHead(503); return res.end("busy"); }
         res.writeHead(201, { "content-type": "application/json" });
         return res.end(JSON.stringify({ memoryId: "m1" }));
@@ -33,7 +35,7 @@ describe("request handling", () => {
   });
 
   test("201 Created is a success, not an error", async () => {
-    const r = await client().requestJson("POST", `${server.origin}/retry-then-ok`, { a: 1 });
+    const r = await client().requestJson("POST", `${server.origin}/retry-then-ok?id=created`, { a: 1 });
     assert.equal(r.status, 201);
     assert.deepEqual(r.json, { memoryId: "m1" });
   });
@@ -57,6 +59,22 @@ describe("request handling", () => {
       () => client(0).requestJson("POST", `${server.origin}/conflict`, {}),
       (err) => err.status === 409 && String(err.responseBodyText).includes("ALREADY_EXISTS")
     );
+  });
+
+  test("a non-retryable status is sent once, not maxRetries times", async () => {
+    // The HttpError for a 4xx is thrown inside the same try that catches
+    // network errors, so without an explicit rethrow a 400 was re-sent on
+    // every remaining attempt. Found by a live run: 4 attempts for one 400.
+    const before = server.received.length;
+    await assert.rejects(() => client(3).requestJson("POST", `${server.origin}/bad-request`, {}));
+    assert.equal(server.received.length - before, 1, "a 400 must not be retried");
+  });
+
+  test("a retryable status is retried", async () => {
+    const before = server.received.length;
+    const r = await client(3).requestJson("POST", `${server.origin}/retry-then-ok?id=retried`, {});
+    assert.equal(r.status, 201);
+    assert.ok(server.received.length - before > 1, "a 503 should have been retried");
   });
 
   test("the API key travels as x-api-key on every request", async () => {

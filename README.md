@@ -2,6 +2,12 @@
 
 Sync Markdown notes to a GoodMem server via the GoodMem REST API on every note save.
 
+> **Status — 0.2.0 (unreleased).** Not published to the Obsidian community
+> plugin registry and no GitHub release exists; install by building from
+> source (below). Desktop only. 18 tests run against the plugin's own bundled
+> code; the retrieval-facing behaviour is verified against a live GoodMem
+> server (v1.0.320).
+
 ## Why use it
 
 This plugin turns your Obsidian vault into a searchable knowledge base for AI, powered by [GoodMem](https://goodmem.ai). Once your notes are in GoodMem, you can do things like:
@@ -66,6 +72,17 @@ host — and the settings pane shows a standing warning while it is on.
 > Versions up to 0.1.0 disabled verification for *every* host unconditionally,
 > and reported it with a `console.debug` line that the plugin never surfaced.
 
+### Requests and retries
+
+Requests carry `x-api-key` and time out after 15s. A `429` or a `5xx` is
+retried with exponential backoff and jitter; a `4xx` is **not** retried — it
+is raised with the server's own message intact, so `400 Invalid UUID format`
+reaches you as that rather than as a bare status.
+
+> Up to 0.1.0 a `4xx` was retried `maxRetries` more times: the error for a
+> non-retryable status was thrown inside the same `try` that catches network
+> failures. A live run showed **4 attempts for one 400**.
+
 ### Desktop only
 
 The plugin uses Node's `https` module, which Obsidian mobile does not provide,
@@ -103,9 +120,22 @@ To install locally:
 
 Prereqs: Node.js 18+ recommended.
 
+### Install from source
+
+```bash
+npm ci
+npm run build                     # produces main.js
+```
+
+Copy `main.js` and `manifest.json` into
+`<vault>/.obsidian/plugins/goodmem-sync/`, then enable **GoodMem Sync** in
+Obsidian's community-plugin settings.
+
+### Working on it
+
 - Install deps: `npm install`
 - Typecheck: `npm run typecheck`
-- Test: `npm test`
+- Test: `npm test` (18 tests)
 - Build once: `npm run build`
 - Dev (watch): `npm run dev`
 

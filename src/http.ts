@@ -223,6 +223,11 @@ export class GoodMemHttpClient {
           responseBodyText: resp.bodyText
         });
       } catch (err: unknown) {
+        // A non-retryable HTTP status was already decided above and thrown
+        // from inside this try; it must not fall into the network-error
+        // retry below, or a 400 or a 409 is re-sent maxRetries more times.
+        if (err instanceof HttpError) throw err;
+
         const elapsedMs = Date.now() - startedAt;
         const isAbort =
           (err instanceof Error && err.name === "AbortError") ||

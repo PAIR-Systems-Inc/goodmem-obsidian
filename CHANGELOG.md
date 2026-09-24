@@ -27,16 +27,23 @@
   Node's `http`/`https`, which Obsidian mobile does not provide, so the plugin
   advertised mobile support it could not deliver.
 
+- **A `4xx` is no longer retried.** The `HttpError` for a non-retryable status
+  was thrown inside the same `try` that catches network failures, so the
+  retry branch below re-sent it `maxRetries` more times. A live run showed
+  four attempts for one `400`. Found by running the plugin's own client
+  against the server, not by reading the code.
+
 ### Added
 
-- **16 tests**, where there were none. They bundle the plugin's real
+- **18 tests**, where there were none. They bundle the plugin's real
   TypeScript with esbuild and run it under Node; the TLS tests stand up real
   HTTPS servers with self-signed certificates rather than mocking sockets.
   Covered: a wrong-host certificate is refused and nothing reaches the server;
   an exemption for one host does not apply to another; an exemption for exactly
   the configured host is honoured; `201`/`204`/`4xx`/`409` handling; the
-  server's own error message survives; the API key is sent on every request;
-  base-URL normalisation and memory-id encoding.
+  server's own error message survives; a non-retryable status is sent once
+  while a `503` is retried; the API key is sent on every request; base-URL
+  normalisation and memory-id encoding.
 - `npm test` script.
 
 ### Unchanged, and why

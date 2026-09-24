@@ -10,6 +10,41 @@ import { X509Certificate } from "node:crypto";
 
 const require = createRequire(import.meta.url);
 
+/**
+ * A stand-in for Obsidian's runtime module.
+ *
+ * `tags.ts` imports `parseYaml` from "obsidian", which only exists inside the
+ * app. Obsidian's own implementation is js-yaml; a minimal reader covers the
+ * frontmatter shapes the plugin parses (a scalar, an inline list, a block
+ * list) and keeps the tests dependency-free.
+ */
+function obsidianStub() {
+  const parseYaml = (text) => {
+    const doc = {};
+    const lines = String(text ?? "").split("\n");
+    let key = null;
+    for (const raw of lines) {
+      if (!raw.trim() || raw.trim().startsWith("#")) continue;
+      const item = raw.match(/^\s*-\s*(.+?)\s*$/);
+      if (item && key) {
+        (doc[key] = Array.isArray(doc[key]) ? doc[key] : []).push(strip(item[1]));
+        continue;
+      }
+      const kv = raw.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
+      if (!kv) continue;
+      key = kv[1];
+      const value = kv[2].trim();
+      if (!value) { doc[key] = []; continue; }
+      doc[key] = value.startsWith("[")
+        ? value.slice(1, -1).split(",").map((v) => strip(v)).filter(Boolean)
+        : strip(value);
+    }
+    return doc;
+  };
+  const strip = (v) => v.trim().replace(/^["']|["']$/g, "");
+  return { parseYaml };
+}
+
 /** Bundle a source module to CJS and require it. */
 export function loadModule(entry) {
   const dir = mkdtempSync(join(tmpdir(), "gm-obsidian-"));
@@ -19,7 +54,21 @@ export function loadModule(entry) {
     `--outfile=${out}`], { stdio: "pipe" });
   // The plugin targets Obsidian's renderer, where `window` exists.
   globalThis.window ??= { setTimeout, clearTimeout };
-  return require(out);
+  // "obsidian" is external in the bundle and unresolvable outside the app.
+  const obsidianPath = require.resolve("node:util");
+  require.cache[obsidianPath] = { id: obsidianPath, filename: obsidianPath,
+    loaded: true, exports: obsidianStub() };
+  const Module = require("node:module");
+  const origResolve = Module._resolveFilename;
+  Module._resolveFilename = function (request, ...rest) {
+    if (request === "obsidian") return obsidianPath;
+    return origResolve.call(this, request, ...rest);
+  };
+  try {
+    return require(out);
+  } finally {
+    Module._resolveFilename = origResolve;
+  }
 }
 
 /** A self-signed HTTPS server whose certificate names `cn`. */
