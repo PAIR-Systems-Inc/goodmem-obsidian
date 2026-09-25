@@ -54,9 +54,13 @@ Settings (required):
 Settings (optional):
 - `allowSelfSignedCert` (boolean, default `false`) — see **TLS** below
 - `debounceMs` (number, default `750`)
-- `enableDebugLogging` (boolean)
+- `enableDebugLogging` (boolean, default `false`)
 - `initialSyncOnStartup` (boolean, default `false`)
 - `initialSyncConcurrency` (number, default `4`)
+
+Server URL normalization:
+- If you enter `http://host:8080`, requests go to `http://host:8080/v1/...`
+- If you enter `http://host:8080/v1`, requests go to `http://host:8080/v1/...`
 
 ### TLS
 
@@ -75,9 +79,14 @@ host — and the settings pane shows a standing warning while it is on.
 ### Requests and retries
 
 Requests carry `x-api-key` and time out after 15s. A `429` or a `5xx` is
-retried with exponential backoff and jitter; a `4xx` is **not** retried — it
-is raised with the server's own message intact, so `400 Invalid UUID format`
-reaches you as that rather than as a bare status.
+retried with exponential backoff and jitter; a `4xx` is **not** retried.
+
+When a sync fails, Obsidian shows a notice (*GoodMem Sync failed for "…". Check
+console for details.*) and the developer console logs
+`[GoodMem] Sync failed for <path>: HTTP 400` followed by the error object. The
+server's own message is not in that line: it is kept, unmodified, on the error's
+`responseBodyText` property, so expand the logged error to read it (for example
+`{"error":"Invalid UUID format"}`).
 
 > Up to 0.1.0 a `4xx` was retried `maxRetries` more times: the error for a
 > non-retryable status was thrown inside the same `try` that catches network
@@ -88,10 +97,6 @@ reaches you as that rather than as a bare status.
 The plugin uses Node's `https` module, which Obsidian mobile does not provide,
 so `manifest.json` declares `isDesktopOnly: true`. (0.1.0 declared `false`
 while importing the same Node modules.)
-
-Server URL normalization:
-- If you enter `http://host:8080`, requests go to `http://host:8080/v1/...`
-- If you enter `http://host:8080/v1`, requests go to `http://host:8080/v1/...`
 
 ## Metadata written to GoodMem
 
@@ -118,7 +123,10 @@ To install locally:
 
 ## Build
 
-Prereqs: Node.js 18+ recommended.
+Prereqs: Node.js 20 or later to build; Node.js 22 or later to run the tests.
+`npm test` hands `node --test` a glob (`test/**/*.test.mjs`), which Node 20
+reads as a literal file name, so it fails there with `Could not find …`. CI
+runs the current Node LTS.
 
 ### Install from source
 
@@ -135,7 +143,7 @@ Obsidian's community-plugin settings.
 
 - Install deps: `npm install`
 - Typecheck: `npm run typecheck`
-- Test: `npm test` (22 tests)
+- Test: `npm test` (22 tests; Node 22+)
 - Build once: `npm run build`
 - Dev (watch): `npm run dev`
 
