@@ -2,11 +2,11 @@
 
 Sync Markdown notes to a GoodMem server via the GoodMem REST API on every note save.
 
-> **Status — 0.2.1 (unreleased).** Not published to the Obsidian community
-> plugin registry and no GitHub release exists; install by building from
-> source (below). Desktop only. 33 tests run against the plugin's own bundled
-> code; the retrieval-facing behaviour is verified against a live GoodMem
-> server (v1.0.320).
+> **Status — 0.2.1.** Not in the Obsidian community plugin registry. Each
+> version is a GitHub release, created automatically when a merged PR bumps the
+> version in `manifest.json` and CI passes. Desktop only. 33 tests run against
+> the plugin's own bundled code; the retrieval-facing behaviour is verified
+> against a live GoodMem server (v1.0.320).
 
 ## Why use it
 
@@ -156,9 +156,11 @@ This repo builds to the standard Obsidian plugin artifacts:
 - `manifest.json`
 - `main.js`
 
-To install locally:
-1. Build the plugin (see below).
-2. Copy or symlink this folder into your vault at:
+To install:
+1. Download `main.js` and `manifest.json` from the
+   [latest release](https://github.com/PAIR-Systems-Inc/goodmem-obsidian/releases/latest),
+   or build the plugin (see below).
+2. Put them in your vault at:
    - `<vault>/.obsidian/plugins/goodmem-sync/`
 3. Reload Obsidian, then enable **GoodMem Sync** in Community Plugins.
 

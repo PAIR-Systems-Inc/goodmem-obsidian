@@ -1,0 +1,75 @@
+name: Release on merge
+
+# Publishes a merged version bump as a GitHub release, which is how Obsidian
+# installs a plugin. When the CI workflow passes on a push to main, this reads
+# the version in manifest.json. If no release has that tag yet, it builds the
+# merged commit and creates the release with main.js and manifest.json
+# attached. Obsidian requires the tag to be the bare version (0.2.1, not
+# v0.2.1). A merge that leaves the version unchanged releases nothing.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write  # create the tag and the release
+
+concurrency:
+  group: release-on-merge
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and release a new version
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Read the plugin version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./manifest.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" --silent 2>/dev/null; then
+            echo "Release $version already exists; nothing to release."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.version.outputs.new == 'true'
+        with:
+          node-version: 'lts/*'
+          cache: npm
+
+      - name: Build
+        if: steps.version.outputs.new == 'true'
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Create the release
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # The release notes are this version's section of CHANGELOG.md.
+          awk -v heading="## $VERSION" '
+            $0 == heading || index($0, heading " ") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md." > notes.md
+          gh release create "$VERSION" main.js manifest.json \
+            --target "$SHA" --title "$VERSION" --notes-file notes.md
+          echo "Released $VERSION from $SHA."
