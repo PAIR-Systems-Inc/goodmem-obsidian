@@ -63,10 +63,11 @@ test("the initial sync counts a failed upload as failed, not as ok", async () =>
 
 test("the completion notice reports the real counts", async () => {
   const manager = managerFailingOn(["bad.md"], ["good.md", "bad.md"]);
-  // NoticeLimiter drops any notice within 60s of the last one, which would
-  // hide "complete" behind "started"; capture the messages directly.
+  // NoticeLimiter holds any notice within 60s of the last one until the
+  // interval ends, which would delay "complete" behind "started"; capture the
+  // messages directly.
   const shown = [];
-  manager.notices = { show: (m) => shown.push(m) };
+  manager.notices = { show: (m) => shown.push(m), dispose: () => {} };
   await manager.initialSyncAllMarkdownFiles();
   const done = shown.find((m) => m.includes("initial sync complete"));
   assert.ok(done, `no completion notice among: ${JSON.stringify(shown)}`);

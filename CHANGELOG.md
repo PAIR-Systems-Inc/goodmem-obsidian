@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- **A failed re-save no longer deletes the note from GoodMem.** GoodMem has
+  no update endpoint, so the plugin replaced a note by deleting its memory and
+  then creating a new one, and when the create failed the note was gone.
+  Reproduced live (v1.0.320) with a proxy answering `POST /v1/memories` with
+  `500`: the note went from one memory to none and retrieval stopped
+  returning it. The new memory is now created first, under a new random id,
+  and the old one is deleted only after GoodMem has processed the new one. The
+  same run now keeps the old memory, still retrievable, and reports the
+  failure; `syncNow()` still rejects with it and the initial sync still counts
+  it as failed.
+- **A re-save no longer leaves the note unretrievable while GoodMem processes
+  the new memory.** Deleting first left a gap in which retrieval found neither
+  version: 8 of 14 retrieval samples during a live re-save, 2.1 s at the
+  longest. After: 0 of 15.
+- **An old memory whose delete fails is deleted later, not left behind.** The
+  note is synced, its old memory's id is recorded under `staleMemoryIds` in
+  `data.json`, a notice says so, and the note's next sync deletes it. A `404`
+  on the delete counts as deleted.
+- **A new memory that GoodMem fails to process no longer replaces the old
+  one.** It is deleted, the old one is kept, and the sync is reported as
+  failed. 0.2.0 reported success as soon as the create returned `PENDING`.
+- **A notice within a minute of the previous one is shown, not dropped.**
+  `NoticeLimiter` dropped it, so a second failed sync was never shown. It is
+  now shown when the minute is up (live: at +59.7 s; before: not in 65 s).
+  The initial sync's completion notice, with its counts, usually came within
+  a minute of its start notice and was dropped the same way; it is now shown
+  when that minute is up.
+
+### Changed
+
+- Memory ids are random UUIDv4 instead of `uuidv5(vault name + path)`. Which
+  memory holds each note is kept in `data.json` under `syncedNotes`, next to
+  the settings. A note synced by 0.2.0 is found under its old id on its next
+  sync and replaced, not duplicated.
+- A re-save now waits for GoodMem to process the new memory before deleting
+  the old one: 0.9 to 3.9 s from save to done for a short note in live runs
+  (0.2.0: 0.16 s), about 7 s for a 1 MB note, and at most 60 s before it
+  gives up and leaves the old memory for the next sync. A note with no memory
+  yet is not waited on.
+
+### Added
+
+- **11 tests** (33 in all), each failing on 0.2.0: create-before-delete
+  against a fake GoodMem server that records whether a note ever had no
+  processed memory; a failed create, a failed delete and its retry, a `404`
+  on the delete, a failed and an unconfirmed processing; replacing a 0.2.0
+  memory; a first sync that deletes nothing; the notice limiter; and the
+  records being saved in `data.json` but kept out of the settings.
+
 ## 0.2.0
 
 ### Security
