@@ -50,6 +50,18 @@
   normalisation and memory-id encoding.
 - `npm test` script.
 
+### Documentation
+
+- The README said a server's `4xx` message "reaches you as that rather than as
+  a bare status". It does not: the console line is `Sync failed for <path>:
+  HTTP 400` and the server's text is on the logged error's `responseBodyText`.
+  The README now says where to find it.
+- The README said Node.js 18+ was enough. `npm test` fails on Node 20 (`node
+  --test` does not expand the glob there); the README now says Node 22+ for
+  the tests and Node 20+ for the build, as measured.
+- The server-URL normalisation rules sat under the "Desktop only" heading;
+  they now follow the settings list they describe.
+
 ### Unchanged, and why
 
 Sync still deletes and re-creates a memory on every save. GoodMem has no update
