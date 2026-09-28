@@ -57,7 +57,23 @@ function obsidianStub() {
     }
   }
   Notice.shown = [];
-  return { parseYaml, TFile, Notice };
+  // Enough of Plugin for main.ts's onload(); data.json is the `data` field.
+  class Plugin {
+    constructor(app, manifest) {
+      this.app = app;
+      this.manifest = manifest;
+      this.data = null;
+    }
+    async loadData() { return this.data === null ? null : JSON.parse(JSON.stringify(this.data)); }
+    async saveData(d) { this.data = JSON.parse(JSON.stringify(d)); }
+    addStatusBarItem() { return { setText() {}, remove() {} }; }
+    addSettingTab() {}
+    addCommand() {}
+    registerEvent() {}
+  }
+  class PluginSettingTab {}
+  class Setting {}
+  return { parseYaml, TFile, Notice, Plugin, PluginSettingTab, Setting };
 }
 
 /**
@@ -119,5 +135,73 @@ export async function selfSignedServer(cn, handler) {
     subject: new X509Certificate(readFileSync(cert)).subject,
     received,
     close: () => new Promise((r) => server.close(r))
+  };
+}
+
+/**
+ * A GoodMem server holding memories in a Map, for the sync tests.
+ *
+ * A memory is PENDING for `processingMs` after it is created, then COMPLETED
+ * (or whatever `faults.processing` said at create time). Only a processed
+ * memory counts as retrievable, as on the real server. After every create and
+ * delete, `timeline` records how many retrievable memories each note has, so
+ * a test can see whether a note ever had none. `faults.create`, `.get` and
+ * `.delete` are functions of the memory id returning a status to answer with
+ * instead, or nothing.
+ */
+export async function fakeGoodMem({ processingMs = 50 } = {}) {
+  const memories = new Map();
+  const faults = { create: null, get: null, delete: null, processing: "COMPLETED" };
+  const timeline = [];
+  const statusOf = (m) => (Date.now() - m.createdAt >= processingMs ? m.final : "PENDING");
+  const retrievable = (path) =>
+    [...memories.values()].filter((m) => m.path === path && statusOf(m) === "COMPLETED").length;
+  const record = (op, path) => timeline.push({ op, path, retrievable: retrievable(path) });
+  const send = (res, status, body) => {
+    res.writeHead(status, { "content-type": "application/json" });
+    res.end(body === undefined ? "" : JSON.stringify(body));
+  };
+  const server = await selfSignedServer("localhost", (req, res, body) => {
+    const byId = (req.url ?? "").match(/^\/v1\/memories\/([^/]+)$/);
+    const id = byId ? decodeURIComponent(byId[1]) : undefined;
+    if (req.method === "POST" && req.url === "/v1/memories") {
+      const p = JSON.parse(body);
+      const injected = faults.create?.(p.memoryId);
+      if (injected) return send(res, injected, { error: "injected by the test" });
+      if (memories.has(p.memoryId)) return send(res, 409, { error: `Memory with ID ${p.memoryId} already exists` });
+      memories.set(p.memoryId, {
+        memoryId: p.memoryId, spaceId: p.spaceId, content: p.originalContent,
+        path: p.metadata?.source_path, createdAt: Date.now(), final: faults.processing
+      });
+      record("POST", p.metadata?.source_path);
+      return send(res, 201, { memoryId: p.memoryId, spaceId: p.spaceId, processingStatus: "PENDING" });
+    }
+    if (req.method === "GET" && id) {
+      const injected = faults.get?.(id);
+      if (injected) return send(res, injected, { error: "injected by the test" });
+      const m = memories.get(id);
+      if (!m) return send(res, 404, { error: "Memory not found" });
+      return send(res, 200, { memoryId: id, spaceId: m.spaceId, processingStatus: statusOf(m) });
+    }
+    if (req.method === "DELETE" && id) {
+      const injected = faults.delete?.(id);
+      if (injected) return send(res, injected, { error: "injected by the test" });
+      const m = memories.get(id);
+      if (!m) return send(res, 404, { error: "Memory not found" });
+      memories.delete(id);
+      record("DELETE", m.path);
+      return send(res, 204);
+    }
+    send(res, 404, { error: "no such route in the fake" });
+  });
+  return {
+    ...server,
+    memories,
+    faults,
+    timeline,
+    /** The memories holding one note. */
+    of: (path) => [...memories.values()].filter((m) => m.path === path),
+    /** "METHOD /path" for every request, with a memory id shown as "{id}". */
+    requests: () => server.received.map((r) => `${r.method} ${r.url.replace(/\/v1\/memories\/.+/, "/v1/memories/{id}")}`),
   };
 }

@@ -2,9 +2,9 @@
 
 Sync Markdown notes to a GoodMem server via the GoodMem REST API on every note save.
 
-> **Status — 0.2.0 (unreleased).** Not published to the Obsidian community
+> **Status — 0.2.1 (unreleased).** Not published to the Obsidian community
 > plugin registry and no GitHub release exists; install by building from
-> source (below). Desktop only. 22 tests run against the plugin's own bundled
+> source (below). Desktop only. 33 tests run against the plugin's own bundled
 > code; the retrieval-facing behaviour is verified against a live GoodMem
 > server (v1.0.320).
 
@@ -23,14 +23,41 @@ These are just a few examples — anything you can build on top of the [GoodMem]
 
 On every `*.md` save, the plugin:
 
-1. Computes a deterministic UUIDv5 `memoryId` for the file:
-   - name = `obsidian:{vaultName}:{normalizedPath}`
-   - namespace UUID is a constant baked into the plugin code
-2. Deletes the existing memory (treats 404 as success).
-3. Creates a new memory with:
+1. Creates a new memory for the note, under a new random `memoryId`, with:
    - `contentType: "text/markdown"`
    - `originalContent: <full markdown text>`
    - `metadata` including tags + path labels.
+2. If the note already had a memory, waits until GoodMem has processed the new
+   one (`processingStatus` `COMPLETED`, checked for up to 60 s), then deletes
+   the old one. A `404` on that delete counts as deleted.
+3. Records which memory holds the note in the plugin's `data.json`, under
+   `syncedNotes`, so the next save knows which memory to replace.
+
+GoodMem has no update endpoint, so replacing a note's content always means a
+new memory plus a delete. Creating first means a failure never leaves the note
+without a memory, and retrieval returns the old version until the new one is
+processed, never neither:
+
+- **The create fails:** nothing is deleted, the note keeps its previous
+  memory, and the failure is reported (see **Requests and retries**).
+- **GoodMem fails to process the new memory** (`FAILED`): the new memory is
+  deleted, the previous one is kept, and the sync is reported as failed.
+- **The old memory's delete fails**, or the new memory is not confirmed as
+  processed within 60 s: the note is synced, but the old memory stays for now,
+  so retrieval can return both versions. Its id is kept in `data.json` under
+  the note's `staleMemoryIds`, and the note's next sync deletes it. A notice
+  says so.
+
+Waiting for processing makes a re-save slower: 0.9 to 3.9 s from save to done
+for a short note in live runs against a local server, where 0.2.0 took 0.16 s,
+and about 7 s for a 1 MB note. A note with no memory yet is not waited on.
+
+> Up to 0.2.0 the plugin deleted first, under an id derived from the path
+> (`uuidv5("obsidian:{vaultName}:{normalizedPath}")`). When the create then
+> failed, the note was gone from GoodMem, and even a successful re-save left
+> it unretrievable for about 2 s while the new memory was processed. A note
+> last synced by 0.2.0 is found under that id on its next sync and replaced
+> the same way.
 
 ## Prerequisites: a GoodMem server
 
@@ -88,6 +115,20 @@ server's own message is not in that line: it is kept, unmodified, on the error's
 `responseBodyText` property, so expand the logged error to read it (for example
 `{"error":"Invalid UUID format"}`).
 
+When a note is synced but its old memory could not be deleted yet, the notice
+is *GoodMem Sync: "…" is synced, but its previous version is still in GoodMem.
+The next sync of this note removes it.* and the console logs a
+`[GoodMem] Synced <path>, but 1 older memory of it could not be deleted yet`
+warning with the reason.
+
+The plugin shows at most one notice a minute. A notice that comes sooner is
+held until the minute is up and then shown, with `(suppressed N)` when others
+were held back in between. Every failed sync and every old memory left behind
+is also logged to the console.
+
+> Up to 0.2.0 a notice within a minute of the previous one was dropped, so a
+> second failed sync was never shown.
+
 > Up to 0.1.0 a `4xx` was retried `maxRetries` more times: the error for a
 > non-retryable status was thrown inside the same `try` that catches network
 > failures. A live run showed **4 attempts for one 400**.
@@ -143,7 +184,7 @@ Obsidian's community-plugin settings.
 
 - Install deps: `npm install`
 - Typecheck: `npm run typecheck`
-- Test: `npm test` (22 tests; Node 22+)
+- Test: `npm test` (33 tests; Node 22+)
 - Build once: `npm run build`
 - Dev (watch): `npm run dev`
 

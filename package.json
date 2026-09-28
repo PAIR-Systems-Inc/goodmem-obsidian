@@ -1,6 +1,6 @@
 {
   "name": "goodmem-obsidian-plugin",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Obsidian plugin that syncs Markdown notes to a GoodMem server on save.",
   "license": "MIT",
   "private": true,

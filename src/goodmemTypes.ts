@@ -6,6 +6,13 @@ export interface CreateMemoryRequest {
   metadata?: Record<string, any>;
 }
 
+export interface MemoryResponse {
+  memoryId: string;
+  spaceId: string;
+  /** PENDING until GoodMem has chunked and embedded it, then COMPLETED or FAILED. */
+  processingStatus?: string;
+}
+
 export interface CreateMemoryResponse {
   memoryId: string;
   spaceId: string;

@@ -1,9 +1,13 @@
 import { Plugin, TFile } from "obsidian";
 import { GoodMemSyncSettingTab, DEFAULT_SETTINGS } from "./src/settings";
-import { SyncManager, type GoodMemSyncSettings } from "./src/syncManager";
+import { SyncManager, type GoodMemSyncSettings, type SyncedNote } from "./src/syncManager";
+
+/** data.json: the settings, plus which memory holds each synced note. */
+type PluginData = Partial<GoodMemSyncSettings> & { syncedNotes?: Record<string, SyncedNote> };
 
 export default class GoodMemSyncPlugin extends Plugin {
   settings: GoodMemSyncSettings = { ...DEFAULT_SETTINGS };
+  private syncedNotes: Record<string, SyncedNote> = {};
   private syncManager!: SyncManager;
   private statusEl?: HTMLElement;
 
@@ -12,7 +16,12 @@ export default class GoodMemSyncPlugin extends Plugin {
 
     this.statusEl = this.addStatusBarItem();
     this.statusEl.setText("GoodMem: idle");
-    this.syncManager = new SyncManager(this.app, () => this.settings, (text) => this.statusEl?.setText(text));
+    this.syncManager = new SyncManager(
+      this.app,
+      () => this.settings,
+      (text) => this.statusEl?.setText(text),
+      { notes: this.syncedNotes, save: () => this.saveSettings() }
+    );
 
     this.addSettingTab(new GoodMemSyncSettingTab(this.app, this));
 
@@ -73,11 +82,14 @@ export default class GoodMemSyncPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    const loaded = (await this.loadData()) as Partial<GoodMemSyncSettings> | null;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded ?? {});
+    const { syncedNotes, ...loaded } = ((await this.loadData()) ?? {}) as PluginData;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
+    this.syncedNotes = syncedNotes ?? {};
   }
 
+  /** Writes data.json: the settings and the synced-note records together. */
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    const data: PluginData = { ...this.settings, syncedNotes: this.syncedNotes };
+    await this.saveData(data);
   }
 }
